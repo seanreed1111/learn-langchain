@@ -14,6 +14,7 @@ dependencies = [
   "langchain==1.5.0",
   "langchain-core==1.8.0",
   "langchain-anthropic==1.7.10",
+  "langsmith==0.14.17",
   "python-dotenv==1.2.4",
   "pydantic==2.14.3",
 ]
@@ -25,6 +26,9 @@ dev = [
   "ruff==0.17.5",
   "ty==0.0.102",
 ]
+# Optional extras for lessons 15 and 17 (install everything with: pip install -e ".[dev,evals,studio]").
+evals = ["agentevals==0.0.9"]                 # trajectory evaluators; pulls in openevals, openai, tiktoken
+studio = ["langgraph-cli[inmem]==0.4.43"]     # `langgraph dev`: local Agent Server for Studio
 
 [tool.hatch.build.targets.wheel]
 packages = ["lessons"]
@@ -49,7 +53,7 @@ markers = ["live: calls a real LLM provider (opt-in: needs ANTHROPIC_API_KEY; ru
 addopts = "-m 'not live'"
 
 [tool.coverage.run]
-source = ["lessons", "capstone"]
+source = ["lessons", "capstone", "studio"]
 branch = true
 
 [tool.coverage.report]
@@ -75,9 +79,11 @@ python-version = "3.12"
 extra-paths = ["lessons"]              # lessons/common.py is put on sys.path at runtime
 
 [tool.ty.src]
-include = ["lessons", "tests"]
+include = ["lessons", "capstone", "studio", "tests"]
 
 [tool.ty.analysis]
+# Optional extras (not installed by default): agentevals (lesson 15) and langgraph-cli (lesson 17).
+allowed-unresolved-imports = ["agentevals.**", "langgraph_cli.**"]
 respect-type-ignore-comments = false   # only `# ty: ignore[...]` suppresses, and it is itself checked
 strict-equality-semantics = true
 strict-generic-narrowing = true

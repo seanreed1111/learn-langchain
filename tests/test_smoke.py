@@ -14,7 +14,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 LESSON_FILES = sorted(p.relative_to(ROOT).as_posix() for p in (ROOT / "lessons").glob("[0-9][0-9]_*.py"))
 SCRIPTS = [*LESSON_FILES, "capstone/helpdesk_agent.py"]
-EXPECTED_LESSONS = {f"{n:02d}" for n in range(1, 13)}
+EXPECTED_LESSONS = {f"{n:02d}" for n in range(1, 17)}
 
 
 def _run(script: str, timeout: int = 180) -> subprocess.CompletedProcess[str]:
@@ -24,6 +24,7 @@ def _run(script: str, timeout: int = 180) -> subprocess.CompletedProcess[str]:
         OPENAI_API_KEY="",
         GOOGLE_API_KEY="",
         LANGSMITH_TRACING="false",
+        LANGSMITH_API_KEY="",
         PYTHONIOENCODING="utf-8",
         PYTHONUTF8="1",
     )

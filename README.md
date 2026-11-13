@@ -1,8 +1,9 @@
 # LangChain, Targeted: The Parts That Make LangGraph Easier
 
 A hands-on, runnable path through **only the LangChain you need to understand and use LangGraph well**:
-12 lessons, a capstone, 56 offline tests, and the same lesson plan as the sibling
-[`learn-langgraph`](../learn-langgraph) tutorial.
+17 lessons, a capstone, 89 offline tests, and the same lesson plan as the sibling
+[`learn-langgraph`](../learn-langgraph) tutorial. Lessons 13-17 cover **LangSmith**: tracing, privacy, evaluation,
+CI gates and Studio.
 
 This is not a tour of all of LangChain. Chains, retrievers, document loaders and the long tail of
 integrations are left out on purpose. Every lesson answers one question a LangGraph learner actually hits:
@@ -11,7 +12,7 @@ live in the graph?*
 
 Everything runs **offline by default** (a scripted fake chat model). Add an API key to `.env` and the same
 code uses a real model. Verified against `langchain 1.5.0`, `langgraph 1.2.21`, `langchain-core 1.8.0`,
-`langchain-anthropic 1.7.10`, Python 3.14 (the project requires Python 3.12+), on 2026-11-12.
+`langchain-anthropic 1.7.10`, `langsmith 0.14.17`, Python 3.14 (the project requires Python 3.12+), on 2026-11-12.
 
 ## Table of contents
 
@@ -34,6 +35,12 @@ code uses a real model. Verified against `langchain 1.5.0`, `langgraph 1.2.21`, 
   - [Lesson 10: Human-in-the-loop](#lesson-10-human-in-the-loop)
   - [Lesson 11: Streaming](#lesson-11-streaming)
   - [Lesson 12: Multi-agent systems and dropping down](#lesson-12-multi-agent-systems-and-dropping-down)
+- [Track D: LangSmith, observe, evaluate, debug (13-17)](#track-d-langsmith-observe-evaluate-debug-13-17)
+  - [Lesson 13: Tracing](#lesson-13-tracing)
+  - [Lesson 14: Trace hygiene](#lesson-14-trace-hygiene)
+  - [Lesson 15: Evaluation](#lesson-15-evaluation)
+  - [Lesson 16: Evals in CI and feedback](#lesson-16-evals-in-ci-and-feedback)
+  - [Lesson 17: Studio and the Agent Server](#lesson-17-studio-and-the-agent-server)
 - [Capstone: Help desk with approval gate](#capstone-help-desk-with-approval-gate)
 - [Study plans](#study-plans)
 - [Concepts in one page](#concepts-in-one-page)
@@ -44,6 +51,8 @@ code uses a real model. Verified against `langchain 1.5.0`, `langgraph 1.2.21`, 
 
 ## How to use this repo
 
+- **Lessons 13-17 need no LangSmith account.** They run against a local recording client (see Track D), so every
+  trace, redaction rule, evaluation and feedback payload is real but nothing is uploaded. Add a key later to see the same data in the UI.
 - **Every lesson is one Python file.** The explanation is in the docstring, the code runs, and each file has
   exercises at the bottom. Read the docstring, run it, change something, break it. The capstone is a
   single file too.
@@ -69,10 +78,13 @@ Windows PowerShell (Python 3.12+; the project builds with Hatch/Hatchling):
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -e ".[dev]"      # runtime deps + pytest, ruff, ty
+pip install -e ".[dev,evals,studio]"   # core + pytest/ruff/ty + agentevals (lesson 15) + langgraph-cli (lesson 17)
 copy .env.example .env       # optional: add a key to use a real LLM
-pytest -q                    # should be all green (56 tests, no network needed)
+pytest -q                    # should be all green (89 tests, no network needed)
 ```
+
+The extras are optional. `pip install -e ".[dev]"` is enough for lessons 01-14 and 16; without `evals` lesson 15 skips the
+`agentevals` evaluator, and without `studio` lesson 17 runs its static checks and tells you how to install the CLI (its server tests skip).
 
 Run any lesson: `python lessons/06_create_agent.py`
 
@@ -80,6 +92,9 @@ With a real model: put `ANTHROPIC_API_KEY=...` in `.env`. Lessons pick the model
 `lessons/common.py` (`DEFAULT_MODEL`), or from `LC_MODEL` (any `init_chat_model` string such as
 `anthropic:claude-haiku-5-5`). A real model's wording will differ from the scripted replies shown below,
 but the shape of every trace (which messages, which tool calls, which pauses) is the same.
+
+Real LangSmith tracing (optional): put `LANGSMITH_TRACING=true`, `LANGSMITH_API_KEY=...` and `LANGSMITH_PROJECT=learn-langchain`
+in `.env`. Every lesson from 01 onward is then traced, with no code changes.
 
 If you use Hatch: `hatch run test`, `hatch run lint`, `hatch run typecheck`, `hatch run check`.
 
@@ -107,6 +122,11 @@ One mental split removes most of the confusion:
 | 10 Human-in-the-loop | 08 Human-in-the-loop | `HumanInTheLoopMiddleware` is `interrupt()` for tool approval |
 | 11 Streaming | 09 Streaming | Same `stream_mode`s, applied to an agent |
 | 12 Multi-agent | 11 Subgraphs and multi-agent | An agent is a subgraph; drop to `StateGraph` for control |
+| 13 Tracing | 09 Streaming (observing a run) | A trace is the run tree of the graph you built |
+| 14 Trace hygiene | 07 Persistence | The checkpointer is your copy of the data; a trace is a second one |
+| 15 Evaluation | 12 Reliability (testing) | Score outputs and trajectories against a dataset |
+| 16 Evals in CI | 12 Reliability | Turn scores into a build gate; feedback closes the loop |
+| 17 Studio | 08 Human-in-the-loop, `langgraph.json` | The Agent Server runs your graph with checkpoints and interrupts |
 | Capstone | Capstone | Agents as nodes, plus middleware, approval and context |
 
 ## Curriculum at a glance
@@ -125,6 +145,11 @@ One mental split removes most of the confusion:
 | 10 | [Human-in-the-loop](#lesson-10-human-in-the-loop) | `HumanInTheLoopMiddleware`, approve/edit/reject | Safe tools, built on `interrupt()` |
 | 11 | [Streaming](#lesson-11-streaming) | `updates`, `messages`, `custom`, `values`, v2/v3 | UX for slow agents |
 | 12 | [Multi-agent and dropping down](#lesson-12-multi-agent-systems-and-dropping-down) | Subagent-as-tool vs agents-as-nodes | When `create_agent` is not enough |
+| 13 | [Tracing](#lesson-13-tracing) | Run trees, `tracing_context`, `@traceable`, tags and metadata | See inside any run |
+| 14 | [Trace hygiene](#lesson-14-trace-hygiene) | Redaction, sampling, conditional tracing, threads | Keep sensitive data out of traces |
+| 15 | [Evaluation](#lesson-15-evaluation) | Datasets, evaluators, trajectories, experiments | Know whether a change helped |
+| 16 | [Evals in CI](#lesson-16-evals-in-ci-and-feedback) | Regression gates, `pytest.mark.langsmith`, feedback | Make scores block bad merges |
+| 17 | [Studio and the Agent Server](#lesson-17-studio-and-the-agent-server) | `langgraph.json`, `langgraph dev`, SDK | Drive and debug an agent interactively |
 | ★ | [Capstone](#capstone-help-desk-with-approval-gate) | Everything together | A LangGraph workflow built from LangChain agents |
 
 ---
@@ -853,6 +878,325 @@ checkpointer to both the outer graph and the inner agent (let the outer graph ow
 
 ---
 
+## Track D: LangSmith, observe, evaluate, debug (13-17)
+
+Goal of the track: you can see inside any agent run, keep sensitive data out of traces, measure whether a change
+made the agent better or worse, gate that in CI, and drive an agent interactively through Studio.
+
+**How these lessons run offline.** LangSmith normally means an account and an API key. These lessons use
+[`lessons/ls_offline.py`](lessons/ls_offline.py): `LocalLangSmith` gives a real LangSmith `Client` a recording HTTP
+session, so tracing, redaction, sampling, feedback and evaluation all run for real and every payload that *would* be
+uploaded is captured in memory. Nothing leaves your machine, whatever is in your environment. What you print is what
+the LangSmith UI would show. With a key you simply use the normal `LANGSMITH_*` environment variables; the lesson
+code is the same.
+
+### Lesson 13: Tracing
+
+**File:** [`lessons/13_tracing.py`](lessons/13_tracing.py) · **Run:** `python lessons/13_tracing.py` ·
+**Prerequisites:** lessons 05-06.
+
+**Overview.** A **trace** is the tree of everything one run did, and its shape is the graph you built: a root,
+one `chain` run per node, an `llm` run for the model call and a `tool` run per tool call. LangChain and LangGraph
+emit it automatically; this lesson shows what a run records, how tags, metadata and names flow down the tree,
+how `@traceable` puts your own code in the trace, and how `tracing_context` switches tracing on and off.
+
+**Learning objectives.** By the end of this lesson you will be able to:
+1. **Read** a trace tree and **map** each run to a graph node, a model call or a tool call.
+2. **Enable** tracing with environment variables and **control** it in code with `tracing_context`.
+3. **Attach** `run_name`, tags and metadata through `config`, and **predict** which runs inherit them.
+4. **Instrument** your own function with `@traceable` and **explain** how it nests under the current run.
+5. **Capture** what would be uploaded, offline, and **assert** on it in a test.
+6. **Find** your traces in a project and **say** what a run's fields contain.
+
+**Concepts covered:** the run tree, `run_type` (`chain`, `llm`, `tool`, `retriever`), `LANGSMITH_TRACING`,
+`LANGSMITH_API_KEY`, `LANGSMITH_PROJECT`, `tracing_context(enabled, project_name, tags, metadata, client)`,
+config `run_name`/`tags`/`metadata`, `@traceable`, `LocalLangSmith`.
+
+**Lesson walkthrough.**
+1. **A.** Trace the lesson-05 agent with `run_name="calc"`; print the tree.
+2. **B.** Print one run's `run_type`, project, tags and metadata.
+3. **C.** `handle_request` is a `@traceable` root that wraps the agent call; `get_price` is a tool that calls a `@traceable` helper.
+4. **D.** `enabled=False` records nothing; `enabled=True` records the whole run.
+5. **E.** The payload is plain JSON.
+
+**Run it and what you should see.** A tree rooted at `chain calc` with `chain model` (an `llm ScriptedChatModel` and a
+`chain tools_condition`) alternating with `chain tools` (`tool multiply`, then `tool add`); the model node's
+run with `project: learn-langchain`, tags `['demo', 'graph:step:1']` and metadata `user`, `langgraph_node`,
+`langgraph_step`; a `handle_request` root above `LangGraph`; root tags `['api']` and metadata route `/chat`;
+`retriever price_lookup` nested under `tool get_price`; `enabled=False -> runs recorded: 0` versus `15`.
+
+**Common mistakes.** Forgetting that tags on a `@traceable` apply only to that run while tags in `config` reach
+the whole subtree; expecting `run_name` to rename child runs (it renames only the root you configure);
+leaving tracing on in tests (they then call the network); tracing serverless functions without flushing
+before the process exits.
+
+**Exercises (from the file).**
+1. Rename the `tools` node's run with `.with_config({"run_name": "run_tools"})`.
+2. Add `tags=["experiment-b"]` through `tracing_context` and find which runs inherit it.
+3. With a key and `LANGSMITH_TRACING=true`, run lesson 06 against a real model and compare the UI with the printed tree.
+
+**Check your understanding.**
+1. [O1] What do the runs under a `chain model` and a `chain tools` run represent?
+2. [O1] Lesson 05's trace has `chain tools_condition` runs; lesson 06's `create_agent` trace does not. Why?
+3. [O3] `handle_request` has `tags=["api"]` and its `invoke` passes `tags=["lesson13"]`. Which runs carry which tag?
+4. [O2] `LANGSMITH_TRACING=true` is set, but code runs inside `tracing_context(enabled=False)`. What is recorded?
+5. [O4] Why does `price_lookup` appear under `get_price` without any wiring?
+6. [O6] What do you set to send real traces, and where do you find them?
+
+<details><summary>Answers</summary>
+
+1. A `chain model` run is a graph node: it contains the `llm` run (the actual model call). A `chain tools` run is the tools node: it contains one `tool` run per call it executed.
+2. A hand-built conditional edge is a router function that LangGraph runs as its own runnable, so it is traced. `create_agent` routes internally, so there is no separate router run to show.
+3. `api` is on the `handle_request` run only. `lesson13` (from `config`) is on the runs inside the agent call, such as `model`. Config tags and metadata propagate to children; a decorator's tags do not.
+4. Nothing. `tracing_context(enabled=False)` overrides the environment for everything inside it.
+5. `@traceable` finds the run that is currently executing (the tool run) through the tracing context and registers itself as its child.
+6. `LANGSMITH_TRACING=true` and `LANGSMITH_API_KEY`, plus optionally `LANGSMITH_PROJECT` to choose the project. Runs appear in that project in the LangSmith UI.
+</details>
+
+### Lesson 14: Trace hygiene
+
+**File:** [`lessons/14_trace_hygiene.py`](lessons/14_trace_hygiene.py) · **Run:** `python lessons/14_trace_hygiene.py` ·
+**Prerequisites:** lesson 13 (and lesson 07 for `thread_id`).
+
+**Overview.** Traces contain prompts, tool arguments and answers, a *second copy* of data your checkpointer already
+holds, in a vendor's system. Four controls matter before production: **redaction**, **sampling**, **conditional
+tracing** and **threads**. Each has a sharp edge, and each is proved here by scanning the captured payloads.
+
+**Learning objectives.** By the end of this lesson you will be able to:
+1. **Redact** sensitive text with `create_anonymizer`, `hide_inputs`/`hide_outputs` and `process_inputs`/`process_outputs`.
+2. **State** what redaction does not cover (run names and tags) and **design** around it.
+3. **Sample** traces with a rate and **explain** that sampling keeps or drops whole traces.
+4. **Decide** whether to trace a call from a business rule such as tenant.
+5. **Group** a conversation's traces with `thread_id` and **explain** why it must be on every run.
+6. **Prove** a privacy claim with a test, not a belief.
+
+**Concepts covered:** `Client(anonymizer=...)`, `StringNodeRule`, `hide_inputs`, `hide_outputs`,
+`@traceable(process_inputs, process_outputs)`, `tracing_sampling_rate` / `LANGSMITH_TRACING_SAMPLING_RATE`,
+conditional `tracing_context(enabled=...)`, `thread_id` metadata.
+
+**Lesson walkthrough.**
+1. **Redaction:** email and order-number rules; the question, tool arguments and metadata come out scrubbed.
+2. **Gotcha:** the same email in `run_name` and `tags` is *not* scrubbed.
+3. **Per-function:** `summarize` records only its input length and a stub output.
+4. **Blanket:** `hide_inputs`/`hide_outputs` blank everything.
+5. **Sampling:** rate 0.0, rate 1.0, and rate 0.5 over 20 runs.
+6. **Conditional:** tenants `internal` and `acme-corp`.
+7. **Threads:** two turns on `thread_id="T-1"`.
+
+**Run it and what you should see.** `email leaked: False`, `order leaked: False`, the input
+`Mail <email> about <order>: ...`; then `email leaked: True` for the name and tags case; `{'text_length': 28}`; blank
+inputs and outputs; `rate 0.0: runs recorded = 0`, `rate 1.0: runs recorded = 14`, and at 0.5 roughly 8 of 20 traces each
+with exactly 14 runs; `internal -> 14` versus `acme-corp -> 0`; and `2 root traces, thread_id values across ALL 6 runs: {'T-1'}`.
+
+**Common mistakes.** Putting an identifier in a run name or tag (they are not redacted); trusting regex rules to
+catch everything (test them); sampling by hand-rolled `random()` per run (you get half-traces); expecting `thread_id`
+grouping when you set the key on only the root run.
+
+**Exercises (from the file).**
+1. Add a rule that redacts phone numbers and prove it with `leaked(...)`.
+2. Hide a secret argument of a `@traceable` tool helper with `process_inputs`.
+3. Start thread `T-2` and group the roots by `thread_id`.
+
+**Check your understanding.**
+1. [O2] Which parts of a run does the anonymizer scrub, and which does it not?
+2. [O1] When both a client-level processor and `@traceable(process_inputs=...)` exist, which applies? And the anonymizer versus `hide_inputs`?
+3. [O3] At a sampling rate of 0.5, can you get a trace with only some of its runs?
+4. [O4] A customer has not agreed to share traces. How do you honor that for every request?
+5. [O5] Why does `thread_id` have to be on every run, and what does LangGraph do for you?
+6. [O6] How would you prove in a test that an email never leaves the process?
+
+<details><summary>Answers</summary>
+
+1. Strings in inputs, outputs and metadata values (including tool-call arguments). Not run names and not tags.
+2. The per-function `process_inputs`/`process_outputs` take precedence over Client-level processing, and an `anonymizer` takes precedence over `hide_inputs`/`hide_outputs` (per the LangSmith docs).
+3. No. Sampling is decided per trace: each kept trace is complete (the demo shows exactly 14 runs in every kept trace).
+4. Wrap the call in `tracing_context(enabled=<rule>)`, for example `enabled=tenant in TRACED_TENANTS`, in one place that every request passes through.
+5. Runs without the metadata are left out of thread views, token counts and cost totals. LangGraph copies the `thread_id` from `config["configurable"]` into the metadata of every run automatically.
+6. Run with a `LocalLangSmith` client, then search `json.dumps` of everything it captured for the email (the lesson's `leaked` helper).
+</details>
+
+### Lesson 15: Evaluation
+
+**File:** [`lessons/15_evaluation.py`](lessons/15_evaluation.py) · **Run:** `python lessons/15_evaluation.py` ·
+**Prerequisites:** lessons 04-06, 13.
+
+**Overview.** Tracing tells you what happened; evaluation tells you whether it was good and whether a change helped.
+A **dataset** of examples feeds a **target** (your agent), **evaluators** score each output against a reference, and one
+pass is an **experiment**. This lesson scores a final answer, a trajectory (which tools, in which order) and an
+LLM-as-judge, then runs a good and a deliberately regressed agent to show the evals catching the regression.
+
+**Learning objectives.** By the end of this lesson you will be able to:
+1. **Define** dataset, target, evaluator and experiment, and **identify** them in code.
+2. **Write** code evaluators with the `(outputs, reference_outputs) -> {"key", "score"}` shape.
+3. **Distinguish** final-answer, trajectory and judge evaluators and **say** what each catches.
+4. **Run** `evaluate` offline with `upload_results=False` and **read** the per-evaluator means.
+5. **Detect** a regression by comparing two experiments.
+6. **Explain** why an LLM judge needs its own validation, and why scripted offline evals test the harness, not the model.
+
+**Concepts covered:** `Example`, `evaluate(target, data, evaluators, upload_results=False)`, evaluator return shape,
+trajectory matching (strict, superset, unordered; `agentevals`), LLM-as-judge via structured output, experiment
+comparison, summary evaluators.
+
+**Lesson walkthrough.**
+1. Three cases: `(question, expected answer, expected tools)`, as `Example` objects.
+2. `make_target(variant)` runs the lesson-05 agent; `regressed` stops using tools for the harder questions and guesses.
+3. Evaluators: `final_answer_correct`, `tools_exact`, `tools_superset`, and `agentevals_unordered` (when installed).
+4. `run_experiment` returns the mean score per evaluator; `regressions` lists metrics that dropped.
+5. A "right answer by the wrong route" example, and an LLM-judge evaluator built from `with_structured_output`.
+
+**Run it and what you should see.** The dataset listing; a table with `1.00` for every evaluator on `good` and `0.33`
+on `regressed`; `['final_answer', 'tools_exact', 'tools_superset', 'agentevals_unordered']` as the caught
+regressions; `final_answer: 1.0 (looks fine)` next to `tools_exact: 0.0 (it never used the tool)`; and the judge
+returning `{'key': 'judge_helpful', 'score': 1.0, 'comment': 'correct and short'}`.
+
+**Common mistakes.** Scoring only the final answer (a lucky guess passes); treating an LLM judge's score as ground
+truth without checking it against human labels; comparing experiments run on different datasets; passing dicts to
+`evaluate` offline (it needs `Example` objects).
+
+**Exercises (from the file).**
+1. Add a case where the agent must *not* call a tool and compare `tools_exact` with `tools_superset`.
+2. Add an evaluator that fails any run with more than four tool calls.
+3. Write a summary evaluator for the pass rate and pass it with `summary_evaluators=[...]`.
+4. With a key, upload the dataset and compare two models in the UI.
+
+**Check your understanding.**
+1. [O1] Name the dataset, target, evaluators and experiment in `run_experiment`.
+2. [O3] What can a trajectory evaluator catch that a final-answer evaluator cannot?
+3. [O4] What does `upload_results=False` change, and what must examples be?
+4. [O3] A reference lists only `multiply`; the agent called `multiply` and `add`. Which of `strict`, `superset`, `subset` pass?
+5. [O5] How does the lesson prove the evals can detect a regression?
+6. [O6] Why do offline scores say nothing about model quality?
+
+<details><summary>Answers</summary>
+
+1. Dataset: `make_examples()`. Target: `make_target(variant)`. Evaluators: `evaluators()`. Experiment: the one `evaluate(...)` call, whose results become the per-metric means.
+2. A right answer reached by the wrong route: skipping a required tool, using an unsafe tool, or making wasteful extra calls.
+3. Nothing is created on a server (no dataset or experiment is uploaded); results come back in-process. Examples must be `Example` objects, not plain dicts.
+4. `superset` passes (at least the reference tools were used); `strict` and `subset` do not (an extra `add` call was made). `unordered` would also fail for the same reason.
+5. It runs a deliberately regressed variant through the same evaluators and shows the means fall from 1.00 to 0.33, and the gate in lesson 16 fails.
+6. The model is a scripted replay, so the scores test the eval *harness*. To measure a model you run a real one over a real dataset.
+</details>
+
+### Lesson 16: Evals in CI and feedback
+
+**File:** [`lessons/16_evals_in_ci_and_feedback.py`](lessons/16_evals_in_ci_and_feedback.py) ·
+**Run:** `python lessons/16_evals_in_ci_and_feedback.py` (add `regressed` to see exit code 1) · **Prerequisites:** lessons 13, 15; `tests/test_agent_evals.py`.
+
+**Overview.** Scores become decisions. A **regression gate** fails the build when a metric drops below a threshold;
+`@pytest.mark.langsmith` turns evals into ordinary pytest tests that LangSmith can track; and **feedback** attaches a score
+to one specific production run, which is how production failures become dataset examples.
+
+**Learning objectives.** By the end of this lesson you will be able to:
+1. **Write** a regression gate with per-metric thresholds and a meaningful exit code.
+2. **Run** evals as pytest tests with `@pytest.mark.langsmith` and the `t.log_*` helpers, with and without tracking.
+3. **Attach** feedback to a run by choosing its id and using the current `create_feedback(session_id=...)` form.
+4. **Explain** the flywheel: production trace, feedback, dataset example, eval, fix.
+5. **Distinguish** offline evals from online evaluators on live traces.
+6. **Diagnose** the two failure modes of the pytest marker and of feedback by run id alone.
+
+**Concepts covered:** `check_gates`, exit codes, `@pytest.mark.langsmith`, `langsmith.testing` (`log_inputs`,
+`log_outputs`, `log_reference_outputs`, `log_feedback`), `LANGSMITH_TEST_TRACKING`, `config["run_id"]`,
+`client.read_project`, `client.create_feedback(run_id, key, score, session_id)`, online evaluators (in the UI).
+
+**Lesson walkthrough.**
+1. `GATES` sets minimum means; `check_gates` returns readable failures; `gate_variant` returns `0` or `1`.
+2. `tests/test_agent_evals.py` runs each case as a tracked test and a regressed agent through the same evaluators.
+3. `answer_with_feedback` picks the run id, runs the agent, looks up the project's id and posts feedback.
+
+**Run it and what you should see.** `variant=good ... PASS`, `variant=regressed ... FAIL final_answer: 0.33 < required 1.00`,
+`exit codes a CI job would see: {'good': 0, 'regressed': 1}`; then the root trace id equal to `feedback.run_id`, the payload
+`{'key': 'user_score', 'score': 0.0, 'comment': 'clicked thumbs down'}` and `feedback.session_id is the project's id: True`.
+
+**Common mistakes.** Running `@pytest.mark.langsmith` tests with no key and no `LANGSMITH_TEST_TRACKING=false` (an
+authentication error); calling `create_feedback` with only a `run_id` (deprecated, now a `LangSmithWarning`; pass
+`session_id`); gating on an average for latency (it hides the tail); loosening a threshold to make a build pass.
+
+**Exercises (from the file).**
+1. Add a latency gate; explain why a threshold on an average is weak.
+2. Compare against a stored baseline with a small tolerance; discuss the risk of a loose one.
+3. Write feedback from a thumbs button; where does the run id come from in a web app?
+
+**Check your understanding.**
+1. [O1] What does a CI job look at to decide whether the evals passed?
+2. [O2] Why do the tests in `tests/test_agent_evals.py` pass without any key?
+3. [O3] Why does the lesson choose the run id itself, and where does `session_id` come from?
+4. [O6] What happens if you call `create_feedback(run_id, key=..., score=...)` with no `session_id`?
+5. [O4] Describe the flywheel in one sentence.
+6. [O5] How do online evaluators differ from the experiments in lesson 15?
+
+<details><summary>Answers</summary>
+
+1. The process exit code: `gate_variant` returns `1` when any metric is below its threshold, so the job fails.
+2. `tests/conftest.py` sets `LANGSMITH_TEST_TRACKING=false`, so the `t.log_*` calls do nothing and each test is an ordinary offline pytest test.
+3. Feedback must name the run it belongs to, and the id is only known after the run unless you pass `config={"run_id": ...}` (it becomes the root trace id). `session_id` is the project's UUID, from `client.read_project(project_name=...).id`.
+4. It still works in this version but emits a `LangSmithWarning` that the form is deprecated and will stop working; pass `session_id` (the lesson's test fails on that warning).
+5. A bad production trace gets low feedback, you add it to the dataset as an example with the right answer, the eval now fails on it, and you fix the agent until it passes.
+6. Experiments run a fixed dataset on demand, against a reference. Online evaluators run automatically on a sample of live traces (no reference), so they catch drift you did not anticipate. They are configured in the LangSmith UI and are not reproducible offline.
+</details>
+
+### Lesson 17: Studio and the Agent Server
+
+**File:** [`lessons/17_studio_and_agent_server.py`](lessons/17_studio_and_agent_server.py) ·
+**Also:** [`studio/agent.py`](studio/agent.py), [`langgraph.json`](langgraph.json) · **Run:** `python lessons/17_studio_and_agent_server.py` ·
+**Prerequisites:** lessons 07, 10; `pip install -e ".[studio]"`.
+
+**Overview.** LangSmith Studio is an interactive UI for running and debugging an agent; underneath it is the **Agent Server**,
+an HTTP API with threads, runs, checkpoints and interrupts built in. `langgraph dev` runs it locally. This lesson checks
+the config, starts a real dev server, and drives it through the Python SDK (run, pause for approval, resume, read history),
+which is exactly what Studio does through the same API.
+
+**Learning objectives.** By the end of this lesson you will be able to:
+1. **Write** a `langgraph.json` that exposes a graph, and **say** what the server needs from a graph module.
+2. **Explain** why an exported graph must not carry its own checkpointer.
+3. **Start** `langgraph dev` and **connect** Studio (or any client) to it.
+4. **Drive** a thread over the SDK: create, run until an interrupt, resume with a decision.
+5. **Use** thread history to explain "re-run from any step".
+6. **Keep** traces local while experimenting, and **troubleshoot** the common launch problems.
+
+**Concepts covered:** `langgraph.json` (`graphs`, `dependencies`), `langgraph dev` flags (`--no-browser`, `--no-reload`,
+`--port`, `--tunnel`), the Agent Server API, `langgraph_sdk` (`threads`, `runs.wait`, `command={"resume": ...}`,
+`get_state`, `get_history`), server-supplied persistence.
+
+**Lesson walkthrough.**
+1. **A.** Load `langgraph.json`, import `./studio/agent.py:graph`, and check it is a compiled graph with no checkpointer.
+2. **B.** `dev_server()` starts `langgraph dev` on a free port with tracing off, waits for `/ok`, and always stops the process tree.
+3. **C.** `drive` creates a thread, runs to the refund approval, reads the paused state, resumes with `approve`, and counts checkpoints.
+
+**Run it and what you should see.** The graph spec, `CompiledStateGraph` with the middleware nodes, `checkpointer ... None`;
+`server is up at http://127.0.0.1:<port>` and the Studio URL; then `graphs served: ['helpdesk']`, `paused at:
+['HumanInTheLoopMiddleware.after_model']`, the approval request `('issue_refund', {'order_id': '123', 'amount': 79.0})`,
+the final answer, message types `['human', 'ai', 'tool', 'ai', 'tool', 'ai']`, `checkpoints: 10`, and `server stopped.`
+
+**Common mistakes.** Compiling the graph with a checkpointer (the server provides persistence); an exported graph that
+is single-use (a scripted model that runs out); `langgraph --help` crashing on Windows with a `UnicodeEncodeError`
+(set `PYTHONUTF8=1`); opening Studio in Safari (it blocks localhost; use `--tunnel`); forgetting that Studio itself is a
+LangSmith web app that needs an account.
+
+**Exercises (from the file).**
+1. Run `langgraph dev` yourself, open the Studio URL and approve the refund in the UI.
+2. Edit a tool's docstring and watch hot reload; say why `--no-reload` prevents it.
+3. Reject instead of approve, and fork the thread from the first checkpoint.
+
+**Check your understanding.**
+1. [O1] What are the two things `langgraph.json` must tell the server for this project?
+2. [O2] Why does `studio/agent.py` use `HumanInTheLoopMiddleware` without `checkpointer=`?
+3. [O4] What does the SDK return when a run hits the approval, and how do you continue it?
+4. [O5] What is a checkpoint here, and why are there ten?
+5. [O6] How do you stop a local experiment from sending traces to LangSmith?
+6. [O3] Studio will not load in Safari. What do you do?
+
+<details><summary>Answers</summary>
+
+1. Which graph(s) to serve (`"graphs": {"helpdesk": "./studio/agent.py:graph"}`) and where the project's dependencies are (`"dependencies": ["."]`).
+2. The server supplies the checkpointer, so a graph exported for it must not bring its own. Pauses, thread history and re-runs all rely on the server's persistence.
+3. The result contains `__interrupt__` with the `action_requests`, and the thread's state shows the graph waiting at `HumanInTheLoopMiddleware.after_model`. Continue with a second `runs.wait(..., command={"resume": {"decisions": [{"type": "approve"}]}})` on the same thread.
+4. A snapshot of the thread's state saved after each step. There are ten because the run took several steps before and after the pause, and each is a point you can inspect or re-run from.
+5. Set `LANGSMITH_TRACING=false` (the lesson sets it for the server process); the LangSmith docs recommend this to keep data local.
+6. Start the server with `langgraph dev --tunnel`, because Safari blocks Studio's connection to `localhost`.
+</details>
+
+---
+
 ## Capstone: Help desk with approval gate
 
 **File:** [`capstone/helpdesk_agent.py`](capstone/helpdesk_agent.py) · **Run:** `python capstone/helpdesk_agent.py` ·
@@ -893,7 +1237,8 @@ user id from tool arguments; letting a rejection leave a tool call unanswered; n
 1. Swap `InMemorySaver` for SQLite or Postgres and resume after a process restart.
 2. Only require approval above a threshold with `when=`.
 3. Stream the run with `stream_mode=["updates", "messages"]`, `subgraphs=True`, `version="v2"`.
-4. Add an eval set of support conversations with assertions on tool calls and the refund store.
+4. Add an eval set of support conversations with assertions on tool calls and the refund store (lesson 15).
+5. Trace a run with `LocalLangSmith` (lesson 13) and prove the customer's order id never appears in it (lesson 14).
 
 **Check your understanding.**
 1. [O2] A user asks about order 456, which belongs to someone else. What does the model learn, and why?
@@ -924,6 +1269,9 @@ user id from tool arguments; letting a rejection leave a tool call unanswered; n
 - **Days 5-6:** lessons 08-10. Write one custom hook and one `when` rule of your own.
 - **Day 7:** lessons 11-12 and the capstone.
 
+**Add a LangSmith weekend:** 13-14 on Saturday (trace the capstone, then redact it), 15-16 on Sunday (write a five-case eval set for
+your own agent and wire the gate into CI), 17 whenever you want a UI. Put a real key in `.env` for 13 and 17.
+
 **Alongside `learn-langgraph`:** take 01-04 here, then `learn-langgraph` 01-04 and 05-06 (which will now read
 as review), then 06-10 here with `learn-langgraph` 07-10, then 11-12 with its 11.
 
@@ -942,17 +1290,27 @@ as review), then 06-10 here with `learn-langgraph` 07-10, then 11-12 with its 11
 - **Human approval is `interrupt()`.** `HumanInTheLoopMiddleware` pauses after the model proposes a call and before tools run; it needs a checkpointer and a stable `thread_id`.
 - **Stream with the graph's modes.** `updates`, `messages`, `custom`, `values`; `version="v2"` chunks carry a `type`.
 - **Compose agents two ways:** as tools (clean context, supervisor in charge) or as nodes (you control the flow). Drop to `StateGraph` when you need explicit routing, approvals or non-message state.
+- **A trace is the run tree of your graph.** One `chain` run per node, an `llm` run per model call, a `tool` run per tool call. `@traceable` adds your own functions; `tracing_context` turns tracing on or off.
+- **Redaction covers inputs, outputs and metadata values, not run names or tags.** Sampling keeps whole traces. `thread_id` reaches every run's metadata automatically.
+- **Evaluate three things:** the final answer, the trajectory (tool use), and, carefully, an LLM judge. Gate on thresholds in CI; feed bad production runs back into the dataset.
+- **Feedback needs the project id.** `create_feedback(run_id=..., session_id=project.id, ...)`; the run-id-only form is deprecated.
+- **The Agent Server (`langgraph dev`) supplies persistence.** Export a compiled graph without a checkpointer; Studio and the SDK drive threads, interrupts and checkpoints through the same API.
 - **Scripted models are single-use.** Build a fresh one per agent, and cap `batch` concurrency when you use one.
 
 ## Project layout
 
 ```
-lessons/        01-12 scripts; common.py (offline/real model switch, scripted fake, show/banner helpers)
+lessons/        01-17 scripts; common.py (offline/real model switch, scripted fake); ls_offline.py (local LangSmith recorder)
 capstone/       helpdesk_agent.py
-tests/          56 offline tests (+ 1 opt-in live test)
+studio/         agent.py, the graph `langgraph dev` serves (lesson 17)
+langgraph.json  Studio / Agent Server entry (graph name -> module:variable)
+tests/          89 offline tests (+ 1 opt-in live test)
 pyproject.toml  Hatch/Hatchling build; pinned dependencies; ruff and ty (strictest) configuration
 .env.example    optional API key and model selection
 ```
+
+`lessons/ls_offline.py` is the LangSmith counterpart: a real `Client` over a recording HTTP session, so lessons 13-17 show and
+test exactly what would be uploaded without an account.
 
 `lessons/common.py` holds the offline double: `ScriptedChatModel` replays a list of `AIMessage`s, accepts
 `bind_tools` as a no-op, and streams words and tool calls, so every lesson (including streaming) runs
@@ -962,17 +1320,19 @@ model behavior.
 ## Testing and quality gates
 
 ```powershell
-pytest -q                          # 56 tests, offline
+pytest -q                          # 89 tests, offline
 pytest -q -m live                  # opt-in: one test against a real model (needs ANTHROPIC_API_KEY)
 ruff check .                       # lint
 ty check                           # type check: every rule is an error (see pyproject.toml)
-pytest --cov                       # coverage gate: 85% (currently about 97%)
+pytest --cov                       # coverage gate: 85% (currently about 95%)
 ```
 
 | Test file | Tests | Covers |
 |---|---|---|
-| `tests/test_lessons.py` | 37 | one group per lesson, plus the capstone (approve, reject, ownership, budget) |
-| `tests/test_smoke.py` | 14 | runs every lesson script and the capstone exactly as a learner would |
+| `tests/test_lessons.py` | 37 | one group per lesson 01-12, plus the capstone (approve, reject, ownership, budget) |
+| `tests/test_langsmith.py` | 24 | lessons 13-17: run trees, tags, redaction (and its gaps), sampling, threads, evals, gates, feedback, a real `langgraph dev` server |
+| `tests/test_agent_evals.py` | 4 | evals as `@pytest.mark.langsmith` tests (run locally; tracked in LangSmith when you opt in) |
+| `tests/test_smoke.py` | 19 | runs every lesson script and the capstone exactly as a learner would |
 | `tests/test_model_config.py` | 5 | the offline/online switch in `common.py` |
 | `tests/test_live.py` | 1 (opt-in) | the same loop against a real model |
 
@@ -982,13 +1342,17 @@ This tutorial is deliberately narrow. Not covered, and where to go:
 
 - **LCEL chains, retrievers, document loaders, vector stores, text splitters.** Useful, but not needed to
   understand LangGraph. RAG lives in `learn-langgraph` lessons 13-15.
-- **MCP tools, the frontend and generative-UI patterns, Agent Chat UI, LangSmith Studio and deployment.**
-  Real topics; see the docs map below.
+- **MCP tools, the frontend and generative-UI patterns, Agent Chat UI and deployment.** Real topics; see the docs map below.
+  (Studio is covered in lesson 17; deploying to LangSmith is not.)
 - **Handoffs and skills (other multi-agent patterns).** Lesson 12 covers the two you need to reason about
   the rest; the docs describe handoffs, router and skills in detail.
 - **Provider-specific middleware** (prompt caching, bash and file tools) and the **Deep Agents** harness.
-- **Evals and observability.** Set `LANGSMITH_TRACING=true` with a key and every lesson is traced; the docs
-  cover evals and unit and integration testing of agents.
+- **LangSmith features that need a server or the UI:** online evaluators on live traces, the prompt hub, dashboards and alerts,
+  the OpenTelemetry integration, distributed tracing across services, and deployments. Lessons 13-17 cover the parts you can
+  reproduce and test locally; the docs cover the rest.
+- **What lessons 13-17 do not verify:** they capture exactly what the client would upload, but they never reach a real
+  LangSmith server, so the UI itself and server-side behavior (project creation, retention, Studio's browser UI) are described
+  from the documentation, not exercised.
 
 ## Official docs map
 
@@ -1011,9 +1375,21 @@ This tutorial is deliberately narrow. Not covered, and where to go:
 - Context engineering: <https://docs.langchain.com/oss/python/langchain/context-engineering.md>
 - Guardrails: <https://docs.langchain.com/oss/python/langchain/guardrails.md>
 - Unit testing agents: <https://docs.langchain.com/oss/python/langchain/test/unit-testing.md>
+- Trace LangChain agents: <https://docs.langchain.com/langsmith/trace-with-langchain.md>
+- Trace LangGraph agents: <https://docs.langchain.com/langsmith/trace-with-langgraph.md>
+- Custom instrumentation (`@traceable`): <https://docs.langchain.com/langsmith/annotate-code.md>
+- Add metadata and tags: <https://docs.langchain.com/langsmith/add-metadata-tags.md>
+- Configure threads: <https://docs.langchain.com/langsmith/threads.md>
+- Mask inputs and outputs: <https://docs.langchain.com/langsmith/mask-inputs-outputs.md>
+- Sample traces: <https://docs.langchain.com/langsmith/sample-traces.md>
+- Feedback (`create_feedback` now needs `session_id`): <https://docs.langchain.com/langsmith/smithdb-sdk-migration-feedback.md>
+- Online evaluators: <https://docs.langchain.com/langsmith/online-evaluations-llm-as-judge.md>
+- Agent evals (`agentevals`): <https://docs.langchain.com/oss/python/langchain/test/evals.md>
+- LangSmith Studio: <https://docs.langchain.com/oss/python/langchain/studio.md>
+- Agent observability: <https://docs.langchain.com/oss/python/langchain/observability.md>
 - LangGraph overview (the engine underneath): <https://docs.langchain.com/oss/python/langgraph/overview.md>
 - Full docs index: <https://docs.langchain.com/llms.txt>
 
 > API note: LangChain and LangGraph move fast. If something errors after an upgrade, check the changelog first,
-> then run `pytest tests/test_lessons.py`: it pins every behavior this tutorial claims. Examples here were run
+> then run `pytest tests/test_lessons.py tests/test_langsmith.py`: they pin every behavior this tutorial claims. Examples here were run
 > against the versions listed at the top.

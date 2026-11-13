@@ -9,3 +9,4 @@ __pycache__/
 .sql_demo.sqlite
 .coverage
 .ruff_cache/
+.langgraph_api/

@@ -96,7 +96,7 @@ def build_desk(
         tool_call_msg("issue_refund", {"order_id": "123", "amount": 79.0}, "c2"),
         AIMessage(content="Done - your refund has been processed."),
     ]
-    refund_agent = create_agent(
+    refund_agent = create_agent(  # ty: ignore[no-matching-overload]
         model=get_model(script),
         tools=[lookup_order, issue_refund],
         system_prompt="You are a refunds agent. Look the order up, then refund it.",
@@ -122,7 +122,7 @@ def build_desk(
     def faq(state: DeskState) -> dict[str, Any]:
         return {"messages": [AIMessage("See our help center: returns are free within 30 days.")]}
 
-    b = StateGraph(DeskState, context_schema=Ctx)
+    b = StateGraph(DeskState, context_schema=Ctx)  # ty: ignore[invalid-argument-type]
     b.add_node("triage", triage)
     b.add_node("refund_desk", refund_agent)
     b.add_node("faq", faq)
