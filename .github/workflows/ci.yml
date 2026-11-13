@@ -1,8 +1,11 @@
 name: ci
 
+# DISABLED for now: this only runs when started by hand (Actions tab -> ci -> Run workflow).
+# To turn automatic CI back on, replace `workflow_dispatch:` with:
+#   push:
+#   pull_request:
 on:
-  push:
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   check:
